@@ -108,7 +108,7 @@ export async function fetchDashboardJobs(filters?: {
     throw error;
   }
 
-  return data as JobWithDetails[];
+  return (data || []) as unknown as JobWithDetails[];
 }
 
 /**
@@ -166,7 +166,9 @@ export async function getJobStats() {
     .from('jobs_processed')
     .select('relevance_score, budget_score, client_score, skills_score');
 
-  const avgRelevance = avgScores?.reduce((sum, job) => sum + job.relevance_score, 0) / (avgScores?.length || 1);
+  const avgRelevance = (avgScores && avgScores.length > 0)
+    ? avgScores.reduce((sum, job) => sum + job.relevance_score, 0) / avgScores.length
+    : 0;
 
   return {
     totalJobs: totalJobs || 0,
