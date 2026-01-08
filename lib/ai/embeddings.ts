@@ -1,41 +1,60 @@
-import { pipeline, env } from '@xenova/transformers';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
-// Disable local model downloads (use cached models)
-env.allowLocalModels = false;
-env.allowRemoteModels = true;
+// Hugging Face API Configuration
+const HF_API_KEY = process.env.HUGGINGFACE_API_KEY;
+const HF_MODEL = 'BAAI/bge-base-en-v1.5'; // 768 dimensions (same as Xenova)
 
-// Cache the pipeline (load model once)
-let embedder: any = null;
-
-async function getEmbedder() {
-  if (!embedder) {
-    console.log('Loading local embedding model (first time only, ~109MB download)...');
-    embedder = await pipeline('feature-extraction', 'Xenova/bge-base-en-v1.5');
-    console.log('✓ Model loaded and ready!');
-  }
-  return embedder;
-}
-
+/**
+ * Generate embedding using Hugging Face Inference API
+ * @param text - Text to generate embedding for
+ * @returns 768-dimensional embedding vector
+ */
 export async function generateEmbedding(text: string): Promise<number[]> {
+  if (!HF_API_KEY) {
+    throw new Error('HUGGINGFACE_API_KEY environment variable is not set');
+  }
+
   try {
-    // Get or load the model
-    const model = await getEmbedder();
+    console.log(`Generating embedding via Hugging Face API...`);
     
-    // Generate embedding
-    const output = await model(text, { pooling: 'mean', normalize: true });
+    const response = await fetch(
+      `https://api-inference.huggingface.co/pipeline/feature-extraction/${HF_MODEL}`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${HF_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          inputs: text,
+          options: {
+            wait_for_model: true, // Wait if model is loading
+          },
+        }),
+      }
+    );
 
-    // Convert to regular array
-    const embedding = Array.from(output.data) as number[];
-
-    if (embedding.length !== 768) {
-      console.warn(`Warning: Expected 768 dimensions, got ${embedding.length}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Hugging Face API error (${response.status}): ${errorText}`);
     }
 
+    const result = await response.json();
+    
+    // API returns array of arrays for batch, get first result
+    const embedding = Array.isArray(result[0]) ? result[0] : result;
+
+    // Verify dimension
+    if (embedding.length !== 768) {
+      throw new Error(`Expected 768 dimensions, got ${embedding.length}`);
+    }
+
+    console.log(`✓ Embedding generated (${embedding.length} dimensions)`);
+    
     return embedding;
 
   } catch (error) {
-    console.error('Local embedding generation error:', error);
+    console.error('Hugging Face embedding generation error:', error);
     throw error;
   }
 }
