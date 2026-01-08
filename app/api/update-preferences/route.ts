@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { clearUserSkillsCache } from '@/lib/ai/embeddings';
 
 export async function POST(request: NextRequest) {
   try {
@@ -72,8 +71,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Clear the cached user skills embedding so it gets regenerated
-    clearUserSkillsCache();
+    // Note: User skills embedding will be regenerated on next cron run
     console.log('✓ User preferences updated successfully');
 
     return NextResponse.json({
